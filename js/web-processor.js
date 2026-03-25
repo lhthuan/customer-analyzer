@@ -86,7 +86,7 @@
 
       var firstName = get(cols.firstName).trim();
       var lastName  = get(cols.lastName).trim();
-      var fullName  = (firstName + ' ' + lastName).trim() || (lastName || firstName);
+      var fullName  = (firstName + ' ' + lastName).trim() || lastName || firstName;
       var email     = get(cols.email).toLowerCase().trim();
       var rawPhone  = get(cols.phone);
       var normPhone = SA().normalizePhone(rawPhone);

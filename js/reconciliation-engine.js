@@ -32,6 +32,11 @@
     NAME:         'Name'
   };
 
+  /** Safely read a string value from a row using a column index (-1 → ''). */
+  function getCol(row, colIdx) {
+    return colIdx >= 0 ? String(row[colIdx] || '') : '';
+  }
+
   /**
    * Find the best ERP candidate(s) from a set of row indices.
    * Returns the best match: { erpRowIdx, erpRecord, phoneScore, nameScore, combinedScore, matchType }
@@ -93,7 +98,14 @@
     var EXPORT_THRESHOLD    = 95; // combined score required for export
     var SUSPICIOUS_MIN      = 85; // combined score for suspicious flag
     var NAME_PHASE4_MIN     = 90; // Jaro-Winkler % threshold for phase 4
-    var PHASE4_ERP_LIMIT    = 100000; // max ERP rows to scan in name-only phase
+    /**
+     * Phase 4 (name-only matching) scans ERP rows linearly, which is O(N).
+     * Limiting to 100K rows keeps this phase interactive for large datasets
+     * (~1–2 seconds) while still covering the majority of records in typical
+     * mid-size ERP files. Increase this limit only if accuracy is critical and
+     * the user is willing to accept longer processing times.
+     */
+    var PHASE4_ERP_LIMIT    = 100000;
 
     var matched      = [];
     var suspicious   = [];
@@ -101,6 +113,8 @@
 
     var webRecords = webData.records;
     var total      = webRecords.length;
+    // Cache the phone column index to avoid repeated object lookups
+    var erpPhoneCol = erpIndex.cols.phone;
 
     var CHUNK = 5000;
 
@@ -141,7 +155,7 @@
         var t7 = normPhone.slice(-7);
         if (erpIndex.last7Index.has(t7)) {
           var cands7 = erpIndex.last7Index.get(t7).filter(function (idx) {
-            return SA().normalizePhone(erpIndex.rows[idx][erpIndex.cols.phone >= 0 ? erpIndex.cols.phone : -1] || '') !== normPhone;
+            return SA().normalizePhone(getCol(erpIndex.rows[idx], erpPhoneCol)) !== normPhone;
           });
           result = findBestCandidate(cands7, normPhone, webName, erpIndex, EXPORT_THRESHOLD, MATCH_TYPE.FUZZY_LAST7);
         }
@@ -151,7 +165,7 @@
           var t6 = normPhone.slice(-6);
           if (erpIndex.last6Index.has(t6)) {
             var cands6 = erpIndex.last6Index.get(t6).filter(function (idx) {
-              var ep = SA().normalizePhone(erpIndex.rows[idx][erpIndex.cols.phone >= 0 ? erpIndex.cols.phone : -1] || '');
+              var ep = SA().normalizePhone(getCol(erpIndex.rows[idx], erpPhoneCol));
               return ep !== normPhone && ep.slice(-7) !== normPhone.slice(-7);
             });
             result = findBestCandidate(cands6, normPhone, webName, erpIndex, EXPORT_THRESHOLD, MATCH_TYPE.FUZZY_LAST6);
@@ -187,7 +201,7 @@
           for (var ei = 0; ei < erpScanLimit; ei++) {
             if (matchedERPSet.has(ei)) continue;
             var erpRow = erpIndex.rows[ei];
-            var erpNameRaw = erpIndex.cols.name >= 0 ? String(erpRow[erpIndex.cols.name] || '') : '';
+            var erpNameRaw = getCol(erpRow, erpIndex.cols.name);
             if (!erpNameRaw) continue;
             var ns = SA().nameSimilarity(webName, erpNameRaw);
             if (ns > bestNameScore) {

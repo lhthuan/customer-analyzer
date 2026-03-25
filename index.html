@@ -1187,6 +1187,9 @@ const wsState = {
   result: null,
   busy: false
 };
+// Sample sizes for quality pre-check (not the full reconciliation)
+const WS_ERP_QUALITY_SAMPLE  = 100000; // ERP rows to scan for phone quality preview
+const WS_WEB_QUALITY_SAMPLE  = 500000; // bytes of Web CSV to sample for quality preview
 
 // ── ERP info panel ─────────────────────────────────────────────────────────
 function updateWSERPInfo(){
@@ -1269,7 +1272,7 @@ function wsShowQuality(){
   let valid=0,empty=0,invalid=0;
   const SA = StringAlgorithms;
   const rows = mergedData.rows;
-  const SAMPLE = Math.min(rows.length, 100000);
+  const SAMPLE = Math.min(rows.length, WS_ERP_QUALITY_SAMPLE);
   for(let i=0;i<SAMPLE;i++){
     const raw = phoneCol>=0?String(rows[i][phoneCol]||''):'';
     if(!raw.trim()) empty++;
@@ -1287,7 +1290,7 @@ function wsShowQuality(){
   // Web quality — quick scan from CSV text
   try{
     const delim = CSVParser.detectDelimiter(wsState.webCsvText);
-    const parsed = CSVParser.parseCSV(wsState.webCsvText.slice(0,500000), delim);
+    const parsed = CSVParser.parseCSV(wsState.webCsvText.slice(0, WS_WEB_QUALITY_SAMPLE), delim);
     const wh = parsed.headers;
     const phoneIdx = wh.findIndex(c=>/^phone$/i.test(c.replace(/[\s:]/g,'')));
     let wv=0,we=0,wi2=0;
