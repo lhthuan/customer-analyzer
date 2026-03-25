@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Phân Tích Khách Hàng V2</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="js/csv-parser.js"></script>
+<script src="js/string-algorithms.js"></script>
+<script src="js/erp-processor.js"></script>
+<script src="js/web-processor.js"></script>
+<script src="js/reconciliation-engine.js"></script>
+<script src="js/export-handler.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 :root{
@@ -192,6 +198,48 @@ tr:hover td{background:#f8fffe}
 .hidden{display:none!important}
 .gap7{display:flex;gap:7px;flex-wrap:wrap}
 @media(max-width:760px){.sb{width:200px}.main{margin-left:200px}.frow{grid-template-columns:1fr 1fr}}
+
+/* ── WEB SYNC TAB ── */
+.ws-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:760px){.ws-grid2{grid-template-columns:1fr}}
+.ws-src{background:var(--bg);border:2px dashed var(--border2);border-radius:10px;padding:16px;transition:all .2s}
+.ws-src.has-data{border-color:var(--green);border-style:solid;background:var(--gl)}
+.ws-src.clickable{cursor:pointer}
+.ws-src.clickable:hover{border-color:var(--blue);background:var(--bl)}
+.ws-src-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;gap:5px}
+.ws-src-val{font-size:22px;font-weight:800;font-family:var(--mono);color:var(--green);line-height:1}
+.ws-src-sub{font-size:11px;color:var(--text3);margin-top:3px;font-family:var(--mono)}
+.ws-src-msg{font-size:12px;color:var(--text2)}
+
+.ws-quality{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px}
+.ws-quality-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text2);margin-bottom:9px}
+.ws-quality-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px}
+.ws-quality-row:last-child{border:none}
+.ws-quality-row .k{color:var(--text2)}
+.ws-quality-row .v{font-family:var(--mono);font-weight:700}
+.v-ok{color:var(--green)}.v-warn{color:var(--orange)}.v-bad{color:var(--red)}
+
+.ws-conf-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;font-family:var(--mono)}
+.conf-high{background:var(--gl);color:var(--gd)}
+.conf-med{background:var(--ol);color:var(--orange)}
+.conf-low{background:var(--rl);color:var(--red)}
+
+.ws-progress-wrap{display:flex;align-items:center;gap:10px;padding:12px 0}
+.ws-pg-bar-wrap{flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden}
+.ws-pg-bar{height:100%;background:linear-gradient(90deg,var(--blue),#60a5fa);border-radius:3px;transition:width .3s}
+.ws-pg-msg{font-size:11px;color:var(--text2);font-family:var(--mono)}
+
+.ws-subtabs{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap}
+.ws-subtab{padding:5px 14px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s}
+.ws-subtab:hover{border-color:var(--blue);color:var(--blue)}
+.ws-subtab.active{background:var(--blue);border-color:var(--blue);color:#fff}
+
+.ws-report-section{margin-bottom:14px}
+.ws-report-section h3{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border)}
+.ws-report-kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f4f8;font-size:13px}
+.ws-report-kv:last-child{border:none}
+.ws-report-kv .k{color:var(--text2)}
+.ws-report-kv .v{font-family:var(--mono);font-weight:700}
 </style>
 </head>
 <body>
@@ -277,6 +325,7 @@ tr:hover td{background:#f8fffe}
       <button class="tab" onclick="gotoTab('filter')" id="tabFilter">⚙️ Lọc & Truy vấn</button>
       <button class="tab" onclick="gotoTab('stats')" id="tabStats">📊 Thống kê</button>
       <button class="tab" onclick="gotoTab('analyze')" id="tabAnalyze">🧮 Phân tích cột</button>
+      <button class="tab" onclick="gotoTab('webSync')" id="tabWebSync">🔄 Web Sync</button>
     </div>
 
     <!-- ═══ TAB SEARCH ═══ -->
@@ -374,6 +423,143 @@ tr:hover td{background:#f8fffe}
         <div class="ana-grid" id="anaGrid"></div>
       </div>
     </div>
+
+    <!-- ═══ TAB WEB SYNC ═══ -->
+    <div id="panWebSync" class="hidden">
+
+      <!-- 1. Upload Section -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title"><div class="dot" style="background:var(--blue)"></div>📁 Dữ liệu nguồn</div>
+        </div>
+        <div class="card-body">
+          <div class="ws-grid2">
+            <!-- ERP info (read-only from main tab) -->
+            <div class="ws-src" id="wsERPSrc">
+              <div class="ws-src-title">📊 Dữ liệu ERP (từ tab chính)</div>
+              <div id="wsERPContent">
+                <div class="ws-src-msg" style="color:var(--text3);font-style:italic">Chưa có dữ liệu ERP. Tải file .xlsb từ tab chính.</div>
+              </div>
+            </div>
+            <!-- Web CSV upload -->
+            <div class="ws-src clickable" id="wsWebSrc" onclick="document.getElementById('wsWebFileInput').click()">
+              <input type="file" id="wsWebFileInput" accept=".csv,.txt" style="display:none">
+              <div class="ws-src-title">🌐 Dữ liệu Web (.csv)</div>
+              <div id="wsWebContent">
+                <div class="ws-src-msg">📂 Click hoặc kéo thả file CSV...</div>
+                <div class="ws-src-sub" style="margin-top:6px">Định dạng: semicolon (;) hoặc comma (,)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Data Quality Check -->
+      <div class="card hidden" id="wsQualityCard">
+        <div class="card-head">
+          <div class="card-title"><div class="dot" style="background:var(--orange)"></div>📋 Kiểm tra chất lượng số điện thoại</div>
+        </div>
+        <div class="card-body">
+          <div class="ws-grid2">
+            <div class="ws-quality" id="wsERPQuality"></div>
+            <div class="ws-quality" id="wsWebQuality"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Run Reconciliation -->
+      <div class="card hidden" id="wsRunCard">
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="btn btn-primary" id="wsBtnRun" onclick="runWebSync()">▶ Chạy đối soát</button>
+            <button class="btn btn-outline btn-sm" id="wsBtnReset" onclick="resetWebSync()">↺ Reset</button>
+            <div id="wsProgressWrap" class="ws-progress-wrap hidden" style="flex:1;min-width:200px">
+              <span class="spinner"></span>
+              <div style="flex:1">
+                <div class="ws-pg-bar-wrap"><div class="ws-pg-bar" id="wsPgBar" style="width:0%"></div></div>
+                <div class="ws-pg-msg" id="wsPgMsg">Đang xử lý...</div>
+              </div>
+              <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--blue)" id="wsPgPct">0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Results Dashboard -->
+      <div id="wsResults" class="hidden">
+
+        <!-- KPI Cards -->
+        <div class="kpi-row" id="wsKPIRow"></div>
+
+        <!-- Result Sub-tabs -->
+        <div class="ws-subtabs">
+          <div class="ws-subtab active" onclick="gotoWSTab('matched')" id="wsSubMatched">✓ Đã khớp (<span id="wsMatchedCount">0</span>)</div>
+          <div class="ws-subtab" onclick="gotoWSTab('unmatched')" id="wsSubUnmatched">✗ Chưa khớp</div>
+          <div class="ws-subtab" onclick="gotoWSTab('report')" id="wsSubReport">📊 Báo cáo</div>
+        </div>
+
+        <!-- Matched Records Panel -->
+        <div id="wsPanMatched">
+          <div class="card" style="overflow:hidden">
+            <div class="res-head">
+              <div>
+                <div class="res-title"><div class="dot"></div>Kết quả khớp (≥95% confidence)</div>
+                <div class="res-count" id="wsMatchInfo"></div>
+              </div>
+              <div class="export-btns">
+                <button class="btn btn-export btn-sm" onclick="ExportHandler.exportMatchedCSV(wsState.result.matched)">⬇ CSV</button>
+                <button class="btn btn-blue btn-sm" onclick="ExportHandler.exportMatchedXLSX(wsState.result.matched)">⬇ XLSX</button>
+              </div>
+            </div>
+            <div class="table-wrap" id="wsMatchedTable"></div>
+            <div style="padding:6px 18px;font-size:11px;color:var(--text3);font-family:var(--mono)" id="wsMatchedNote"></div>
+          </div>
+        </div>
+
+        <!-- Unmatched Panel -->
+        <div id="wsPanUnmatched" class="hidden">
+          <!-- ERP Unmatched -->
+          <div class="card" style="overflow:hidden;margin-bottom:10px">
+            <div class="res-head">
+              <div>
+                <div class="res-title"><div class="dot" style="background:var(--red)"></div>ERP – Chưa tìm thấy trên Web</div>
+                <div class="res-count" id="wsUnmatchERPInfo"></div>
+              </div>
+              <div class="export-btns">
+                <button class="btn btn-export btn-sm" onclick="ExportHandler.exportUnmatchedERPCSV(wsState.result.unmatchedERP,wsState.erpIndex)">⬇ CSV</button>
+                <button class="btn btn-blue btn-sm" onclick="ExportHandler.exportUnmatchedERPXLSX(wsState.result.unmatchedERP,wsState.erpIndex)">⬇ XLSX</button>
+              </div>
+            </div>
+            <div class="table-wrap" id="wsUnmatchERPTable"></div>
+            <div style="padding:6px 18px;font-size:11px;color:var(--text3);font-family:var(--mono)" id="wsUnmatchERPNote"></div>
+          </div>
+          <!-- Web Unmatched -->
+          <div class="card" style="overflow:hidden">
+            <div class="res-head">
+              <div>
+                <div class="res-title"><div class="dot" style="background:var(--orange)"></div>Web – Chưa tìm thấy trong ERP</div>
+                <div class="res-count" id="wsUnmatchWebInfo"></div>
+              </div>
+              <div class="export-btns">
+                <button class="btn btn-export btn-sm" onclick="ExportHandler.exportUnmatchedWebCSV(wsState.result.unmatchedWeb,wsState.webData.records)">⬇ CSV</button>
+                <button class="btn btn-blue btn-sm" onclick="ExportHandler.exportUnmatchedWebXLSX(wsState.result.unmatchedWeb,wsState.webData.records)">⬇ XLSX</button>
+              </div>
+            </div>
+            <div class="table-wrap" id="wsUnmatchWebTable"></div>
+            <div style="padding:6px 18px;font-size:11px;color:var(--text3);font-family:var(--mono)" id="wsUnmatchWebNote"></div>
+          </div>
+        </div>
+
+        <!-- Report Panel -->
+        <div id="wsPanReport" class="hidden">
+          <div class="card">
+            <div class="card-head"><div class="card-title"><div class="dot"></div>Báo cáo tổng hợp đối soát</div></div>
+            <div class="card-body" id="wsReportBody"></div>
+          </div>
+        </div>
+
+      </div><!-- /wsResults -->
+    </div><!-- /panWebSync -->
 
   </div>
 </main>
@@ -936,10 +1122,13 @@ function runAnalyze(){
 //  TABS
 // ══════════════════════════════════════════════════════════
 function gotoTab(name){
-  ['search','filter','stats','analyze'].forEach(t=>{
-    G('pan'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('hidden',t!==name);
-    G('tab'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active',t===name);
+  ['search','filter','stats','analyze','webSync'].forEach(t=>{
+    const pan='pan'+t.charAt(0).toUpperCase()+t.slice(1);
+    const tab='tab'+t.charAt(0).toUpperCase()+t.slice(1);
+    G(pan)?.classList.toggle('hidden',t!==name);
+    G(tab)?.classList.toggle('active',t===name);
   });
+  if(name==='webSync') updateWSERPInfo();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -986,6 +1175,321 @@ function toast(msg,type=''){
   el.className='toast'+(type?' '+type:'');el.textContent=msg;
   document.body.appendChild(el);
   clearTimeout(_tt);_tt=setTimeout(()=>el?.remove(),3000);
+}
+
+// ══════════════════════════════════════════════════════════
+//  WEB SYNC — State
+// ══════════════════════════════════════════════════════════
+const wsState = {
+  webCsvText: null,
+  webData: null,
+  erpIndex: null,
+  result: null,
+  busy: false
+};
+
+// ── ERP info panel ─────────────────────────────────────────────────────────
+function updateWSERPInfo(){
+  const src = G('wsERPSrc');
+  const content = G('wsERPContent');
+  if(!mergedData||!mergedData.rows.length){
+    src.classList.remove('has-data');
+    content.innerHTML='<div class="ws-src-msg" style="color:var(--text3);font-style:italic">Chưa có dữ liệu ERP. Tải file .xlsb từ tab chính.</div>';
+    G('wsQualityCard')?.classList.add('hidden');
+    G('wsRunCard')?.classList.add('hidden');
+    return;
+  }
+  src.classList.add('has-data');
+  content.innerHTML=`
+    <div class="ws-src-val">${mergedData.rows.length.toLocaleString()}</div>
+    <div class="ws-src-sub">bản ghi · ${mergedData.headers.length} cột</div>
+    <div class="ws-src-sub" style="margin-top:4px">${eH(activeFile||'')}</div>`;
+  checkWSReady();
+}
+
+// ── Web CSV upload ─────────────────────────────────────────────────────────
+const wsWebFileInput = document.getElementById('wsWebFileInput');
+wsWebFileInput.addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(!f){return;}
+  wsWebFileInput.value='';
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    wsState.webCsvText = ev.target.result;
+    const src = G('wsWebSrc');
+    src.classList.add('has-data');
+    G('wsWebContent').innerHTML=`
+      <div class="ws-src-val">${eH(f.name)}</div>
+      <div class="ws-src-sub">${(f.size/1024/1024).toFixed(2)} MB</div>`;
+    toast('✓ Đã tải file Web CSV');
+    checkWSReady();
+  };
+  reader.onerror=()=>toast('Lỗi đọc file CSV','err');
+  reader.readAsText(f,'UTF-8');
+});
+
+// Drag-and-drop on the Web source card
+const wsWebSrc = document.getElementById('wsWebSrc');
+wsWebSrc.addEventListener('dragover', e=>{e.preventDefault();wsWebSrc.style.borderColor='var(--blue)';});
+wsWebSrc.addEventListener('dragleave',()=>{wsWebSrc.style.borderColor='';});
+wsWebSrc.addEventListener('drop', e=>{
+  e.preventDefault(); wsWebSrc.style.borderColor='';
+  const f = e.dataTransfer.files[0];
+  if(!f){return;}
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    wsState.webCsvText = ev.target.result;
+    wsWebSrc.classList.add('has-data');
+    G('wsWebContent').innerHTML=`
+      <div class="ws-src-val">${eH(f.name)}</div>
+      <div class="ws-src-sub">${(f.size/1024/1024).toFixed(2)} MB</div>`;
+    toast('✓ Đã tải file Web CSV');
+    checkWSReady();
+  };
+  reader.readAsText(f,'UTF-8');
+});
+
+// ── Show run card when both sources ready ──────────────────────────────────
+function checkWSReady(){
+  const erpOk = mergedData && mergedData.rows.length > 0;
+  const webOk = !!wsState.webCsvText;
+  if(erpOk && webOk){
+    G('wsRunCard').classList.remove('hidden');
+    wsShowQuality();
+  }
+}
+
+// ── Quality display (ERP) ──────────────────────────────────────────────────
+function wsShowQuality(){
+  G('wsQualityCard').classList.remove('hidden');
+  // ERP quality — quick scan
+  if(!mergedData)return;
+  const h = mergedData.headers;
+  const phoneCol = h.findIndex(c=>/phoneno|phone|sdt/i.test(c));
+  let valid=0,empty=0,invalid=0;
+  const SA = StringAlgorithms;
+  const rows = mergedData.rows;
+  const SAMPLE = Math.min(rows.length, 100000);
+  for(let i=0;i<SAMPLE;i++){
+    const raw = phoneCol>=0?String(rows[i][phoneCol]||''):'';
+    if(!raw.trim()) empty++;
+    else if(!SA.normalizePhone(raw)) invalid++;
+    else valid++;
+  }
+  const pct = v => SAMPLE?Math.round(v/SAMPLE*100)+'%':'—';
+  const cls = (v,tot) => {const r=v/tot; return r>0.9?'v-ok':r>0.7?'v-warn':'v-bad';};
+  G('wsERPQuality').innerHTML=`
+    <div class="ws-quality-title">📊 ERP Phone Quality${SAMPLE<rows.length?' (mẫu 100K)':''}</div>
+    <div class="ws-quality-row"><span class="k">Tổng</span><span class="v">${SAMPLE.toLocaleString()}</span></div>
+    <div class="ws-quality-row"><span class="k">Hợp lệ</span><span class="v ${cls(valid,SAMPLE)}">${valid.toLocaleString()} (${pct(valid)})</span></div>
+    <div class="ws-quality-row"><span class="k">Rỗng</span><span class="v ${empty>SAMPLE*0.1?'v-warn':'v-ok'}">${empty.toLocaleString()} (${pct(empty)})</span></div>
+    <div class="ws-quality-row"><span class="k">Không hợp lệ</span><span class="v ${invalid>SAMPLE*0.05?'v-bad':'v-ok'}">${invalid.toLocaleString()} (${pct(invalid)})</span></div>`;
+  // Web quality — quick scan from CSV text
+  try{
+    const delim = CSVParser.detectDelimiter(wsState.webCsvText);
+    const parsed = CSVParser.parseCSV(wsState.webCsvText.slice(0,500000), delim);
+    const wh = parsed.headers;
+    const phoneIdx = wh.findIndex(c=>/^phone$/i.test(c.replace(/[\s:]/g,'')));
+    let wv=0,we=0,wi2=0;
+    const wr = parsed.rows;
+    for(let i=0;i<wr.length;i++){
+      const raw = phoneIdx>=0?String(wr[i][phoneIdx]||''):'';
+      if(!raw.trim()) we++;
+      else if(!SA.normalizePhone(raw)) wi2++;
+      else wv++;
+    }
+    const wTot = wr.length||1;
+    G('wsWebQuality').innerHTML=`
+      <div class="ws-quality-title">🌐 Web Phone Quality (mẫu ${wr.length.toLocaleString()})</div>
+      <div class="ws-quality-row"><span class="k">Tổng</span><span class="v">${wr.length.toLocaleString()}</span></div>
+      <div class="ws-quality-row"><span class="k">Hợp lệ</span><span class="v ${wv/wTot>0.9?'v-ok':wv/wTot>0.7?'v-warn':'v-bad'}">${wv.toLocaleString()} (${Math.round(wv/wTot*100)}%)</span></div>
+      <div class="ws-quality-row"><span class="k">Rỗng</span><span class="v ${we/wTot>0.1?'v-warn':'v-ok'}">${we.toLocaleString()} (${Math.round(we/wTot*100)}%)</span></div>
+      <div class="ws-quality-row"><span class="k">Không hợp lệ</span><span class="v ${wi2/wTot>0.05?'v-bad':'v-ok'}">${wi2.toLocaleString()} (${Math.round(wi2/wTot*100)}%)</span></div>`;
+  }catch(err){
+    G('wsWebQuality').innerHTML='<div class="ws-quality-title">🌐 Web</div><div style="color:var(--red);font-size:12px">Lỗi đọc: '+eH(err.message)+'</div>';
+  }
+}
+
+// ── Run reconciliation ─────────────────────────────────────────────────────
+async function runWebSync(){
+  if(wsState.busy){toast('Đang chạy...','warn');return;}
+  if(!mergedData||!mergedData.rows.length){toast('Chưa có dữ liệu ERP','warn');return;}
+  if(!wsState.webCsvText){toast('Chưa tải file Web CSV','warn');return;}
+
+  wsState.busy=true;
+  G('wsBtnRun').disabled=true;
+  G('wsProgressWrap').classList.remove('hidden');
+  G('wsResults').classList.add('hidden');
+
+  function setProgress(frac, msg){
+    const pct = Math.round(frac*100);
+    G('wsPgBar').style.width=pct+'%';
+    G('wsPgPct').textContent=pct+'%';
+    G('wsPgMsg').textContent=msg||'';
+  }
+
+  try{
+    // Step 1: Build ERP index
+    setProgress(0.05,'Lập chỉ mục ERP...');
+    await yieldFrame();
+    const erpIndex = await ERPProcessor.processERPData(
+      mergedData.headers, mergedData.rows,
+      (f,m)=>setProgress(0.05+f*0.40, m)
+    );
+    wsState.erpIndex = erpIndex;
+    setProgress(0.45,'Xử lý dữ liệu Web CSV...');
+
+    // Step 2: Parse Web CSV
+    const webData = await WebProcessor.processWebData(
+      wsState.webCsvText,
+      (f,m)=>setProgress(0.45+f*0.15, m)
+    );
+    wsState.webData = webData;
+    setProgress(0.60,'Đang đối soát...');
+
+    // Step 3: Reconcile
+    const result = await ReconciliationEngine.reconcile(
+      erpIndex, webData,
+      (f,m)=>setProgress(0.60+f*0.38, m)
+    );
+    wsState.result = result;
+    setProgress(1.00,'Hoàn thành!');
+    await yieldFrame();
+
+    // Render results
+    wsRenderResults(result, erpIndex, webData);
+    G('wsResults').classList.remove('hidden');
+    toast(`✓ Đối soát xong! Khớp: ${result.matched.length.toLocaleString()}`);
+
+  }catch(err){
+    toast('Lỗi đối soát: '+err.message,'err');
+    console.error(err);
+  }finally{
+    wsState.busy=false;
+    G('wsBtnRun').disabled=false;
+    G('wsProgressWrap').classList.add('hidden');
+  }
+}
+
+function resetWebSync(){
+  wsState.webCsvText=null; wsState.webData=null;
+  wsState.erpIndex=null; wsState.result=null;
+  G('wsWebSrc').classList.remove('has-data');
+  G('wsWebContent').innerHTML='<div class="ws-src-msg">📂 Click hoặc kéo thả file CSV...</div><div class="ws-src-sub" style="margin-top:6px">Định dạng: semicolon (;) hoặc comma (,)</div>';
+  G('wsQualityCard').classList.add('hidden');
+  G('wsRunCard').classList.add('hidden');
+  G('wsResults').classList.add('hidden');
+  G('wsPgBar').style.width='0%';
+  G('wsPgPct').textContent='0%';
+}
+
+// ── Render results ─────────────────────────────────────────────────────────
+function wsRenderResults(result, erpIndex, webData){
+  const s = result.stats;
+
+  // KPI cards
+  G('wsKPIRow').innerHTML=`
+    <div class="kpi"><div class="kpi-label">Tổng khớp</div><div class="kpi-val">${s.matched.toLocaleString()}</div><div class="kpi-sub">≥95% confidence</div></div>
+    <div class="kpi blue"><div class="kpi-label">Tỷ lệ khớp Web</div><div class="kpi-val" style="color:var(--blue)">${s.matchRate}%</div><div class="kpi-sub">${s.totalWeb.toLocaleString()} bản ghi Web</div></div>
+    <div class="kpi purple"><div class="kpi-label">High Confidence</div><div class="kpi-val" style="color:var(--purple)">${s.highConf.toLocaleString()}</div><div class="kpi-sub">${s.highConfPct}% of matched</div></div>
+    <div class="kpi orange"><div class="kpi-label">ERP chưa khớp</div><div class="kpi-val" style="color:var(--orange)">${s.unmatchedERP.toLocaleString()}</div><div class="kpi-sub">${s.totalERP.toLocaleString()} ERP tổng</div></div>
+    <div class="kpi red"><div class="kpi-label">Web chưa khớp</div><div class="kpi-val" style="color:var(--red)">${s.unmatchedWeb.toLocaleString()}</div><div class="kpi-sub">cần gán tay</div></div>`;
+
+  G('wsMatchedCount').textContent=s.matched.toLocaleString();
+
+  // Matched table
+  const PREV = 500;
+  const matched = result.matched;
+  G('wsMatchInfo').textContent=`${matched.length.toLocaleString()} bản ghi · ≥95% confidence`;
+  G('wsMatchedNote').textContent=matched.length>PREV?`ℹ️ Hiển thị ${PREV} / ${matched.length.toLocaleString()} dòng. Xuất CSV/XLSX để tải toàn bộ.`:'';
+  const mHeaders=['Loại','Score','ERP MaKH','ERP Tên','ERP Phone','ERP Hạng','Web Email','Web Tên','Web Phone'];
+  const mParts=[`<table><thead><tr>${mHeaders.map(h=>`<th>${eH(h)}</th>`).join('')}</tr></thead><tbody>`];
+  matched.slice(0,PREV).forEach(m=>{
+    const e=m.erpRecord||{};const w=m.webRecord||{};
+    const cls=m.combinedScore>=95?'conf-high':m.combinedScore>=85?'conf-med':'conf-low';
+    mParts.push(`<tr>
+      <td><span class="ws-conf-badge ${cls}">${eH(m.matchType)}</span></td>
+      <td><span class="ws-conf-badge ${cls}">${m.combinedScore}%</span></td>
+      <td class="tn">${eH(e.maKH||'')}</td>
+      <td>${eH(e.name||'')}</td>
+      <td class="tn">${eH(e.phone||'')}</td>
+      <td>${eH(e.hangThe||'')}</td>
+      <td>${eH(w.email||'')}</td>
+      <td>${eH(w.fullName||'')}</td>
+      <td class="tn">${eH(w.rawPhone||'')}</td>
+    </tr>`);
+  });
+  mParts.push('</tbody></table>');
+  G('wsMatchedTable').innerHTML=mParts.join('');
+
+  // Unmatched ERP table
+  const unmERP = result.unmatchedERP;
+  G('wsUnmatchERPInfo').textContent=`${unmERP.length.toLocaleString()} bản ghi ERP`;
+  G('wsUnmatchERPNote').textContent=unmERP.length>PREV?`ℹ️ Hiển thị ${PREV} / ${unmERP.length.toLocaleString()} dòng.`:'';
+  const eCols=['MaKH','Tên KH','Phone','Hạng thẻ','Trạng thái'];
+  const eParts=[`<table><thead><tr>${eCols.map(h=>`<th>${eH(h)}</th>`).join('')}</tr></thead><tbody>`];
+  unmERP.slice(0,PREV).forEach(idx=>{
+    const c=erpIndex.cols;const r=erpIndex.rows[idx]||[];
+    eParts.push(`<tr>
+      <td class="tn">${eH(c.maKH>=0?r[c.maKH]||'':'')}</td>
+      <td>${eH(c.name>=0?r[c.name]||'':'')}</td>
+      <td class="tn">${eH(c.phone>=0?r[c.phone]||'':'')}</td>
+      <td>${eH(c.hangThe>=0?r[c.hangThe]||'':'')}</td>
+      <td>${eH(c.status>=0?r[c.status]||'':'')}</td>
+    </tr>`);
+  });
+  eParts.push('</tbody></table>');
+  G('wsUnmatchERPTable').innerHTML=eParts.join('');
+
+  // Unmatched Web table
+  const unmWeb = result.unmatchedWeb;
+  G('wsUnmatchWebInfo').textContent=`${unmWeb.length.toLocaleString()} bản ghi Web`;
+  G('wsUnmatchWebNote').textContent=unmWeb.length>PREV?`ℹ️ Hiển thị ${PREV} / ${unmWeb.length.toLocaleString()} dòng.`:'';
+  const wCols=['Email','Tên','Phone','Ngày ĐK','Trạng thái'];
+  const wParts=[`<table><thead><tr>${wCols.map(h=>`<th>${eH(h)}</th>`).join('')}</tr></thead><tbody>`];
+  unmWeb.slice(0,PREV).forEach(idx=>{
+    const rec=webData.records[idx];if(!rec)return;
+    wParts.push(`<tr>
+      <td>${eH(rec.email)}</td>
+      <td>${eH(rec.fullName)}</td>
+      <td class="tn">${eH(rec.rawPhone)}</td>
+      <td>${eH(rec.regDate)}</td>
+      <td>${eH(rec.status)}</td>
+    </tr>`);
+  });
+  wParts.push('</tbody></table>');
+  G('wsUnmatchWebTable').innerHTML=wParts.join('');
+
+  // Report
+  const typeRows=Object.entries(s.byType).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="ws-report-kv"><span class="k">${eH(k)}</span><span class="v">${v.toLocaleString()}</span></div>`).join('');
+  G('wsReportBody').innerHTML=`
+    <div class="ws-report-section">
+      <h3>📊 Tổng quan</h3>
+      <div class="ws-report-kv"><span class="k">Tổng ERP</span><span class="v">${s.totalERP.toLocaleString()}</span></div>
+      <div class="ws-report-kv"><span class="k">Tổng Web</span><span class="v">${s.totalWeb.toLocaleString()}</span></div>
+      <div class="ws-report-kv"><span class="k">Đã khớp</span><span class="v v-ok">${s.matched.toLocaleString()}</span></div>
+      <div class="ws-report-kv"><span class="k">Tỷ lệ khớp Web</span><span class="v v-ok">${s.matchRate}%</span></div>
+      <div class="ws-report-kv"><span class="k">Nghi vấn (manual)</span><span class="v v-warn">${s.suspicious.toLocaleString()}</span></div>
+    </div>
+    <div class="ws-report-section">
+      <h3>🎯 Confidence</h3>
+      <div class="ws-report-kv"><span class="k">High (≥95%)</span><span class="v v-ok">${s.highConf.toLocaleString()} (${s.highConfPct}%)</span></div>
+      <div class="ws-report-kv"><span class="k">ERP chưa khớp</span><span class="v v-warn">${s.unmatchedERP.toLocaleString()}</span></div>
+      <div class="ws-report-kv"><span class="k">Web chưa khớp</span><span class="v v-warn">${s.unmatchedWeb.toLocaleString()}</span></div>
+    </div>
+    ${typeRows?`<div class="ws-report-section"><h3>🔍 Phân loại khớp</h3>${typeRows}</div>`:''}`;
+
+  gotoWSTab('matched');
+}
+
+// ── Sub-tab navigation ─────────────────────────────────────────────────────
+function gotoWSTab(name){
+  ['matched','unmatched','report'].forEach(t=>{
+    const pan='wsPan'+t.charAt(0).toUpperCase()+t.slice(1);
+    const sub='wsSub'+t.charAt(0).toUpperCase()+t.slice(1);
+    G(pan)?.classList.toggle('hidden',t!==name);
+    G(sub)?.classList.toggle('active',t===name);
+  });
 }
 </script>
 </body>
